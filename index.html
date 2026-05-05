@@ -1,0 +1,1101 @@
+
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Interactive Warm Up Score</title>
+  <link rel="icon" href="data:,">
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@1.3.1/dist/tf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@teachablemachine/pose@0.8.6/dist/teachablemachine-pose.min.js"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <style>
+    :root {
+      --bg: #f5f7fb;
+      --panel: #ffffff;
+      --ink: #172033;
+      --muted: #667085;
+      --line: #d8dee9;
+      --blue: #2563eb;
+      --green: #10b981;
+      --amber: #f59e0b;
+      --red: #ef4444;
+      --dark: #111827;
+      --shadow: 0 16px 38px rgba(23, 32, 51, 0.08);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    button,
+    input {
+      font: inherit;
+    }
+
+    button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      min-height: 40px;
+      padding: 0 14px;
+      border: 1px solid transparent;
+      border-radius: 8px;
+      background: var(--dark);
+      color: #fff;
+      cursor: pointer;
+      transition: transform 160ms ease, background 160ms ease, border-color 160ms ease;
+      white-space: nowrap;
+    }
+
+    button:hover {
+      transform: translateY(-1px);
+      background: #1f2937;
+    }
+
+    button:disabled {
+      cursor: not-allowed;
+      opacity: 0.55;
+      transform: none;
+    }
+
+    button.secondary {
+      background: #fff;
+      color: var(--ink);
+      border-color: var(--line);
+    }
+
+    button.secondary:hover {
+      background: #f9fafb;
+    }
+
+    svg {
+      width: 18px;
+      height: 18px;
+      flex: 0 0 auto;
+    }
+
+    .app {
+      width: min(1180px, calc(100% - 32px));
+      margin: 0 auto;
+      padding: 24px 0 36px;
+    }
+
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
+      margin-bottom: 18px;
+    }
+
+    .brand {
+      min-width: 220px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 28px;
+      line-height: 1.15;
+      font-weight: 800;
+    }
+
+    .subtitle {
+      margin: 6px 0 0;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .actions {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+      margin-bottom: 18px;
+    }
+
+    .stat {
+      min-height: 92px;
+      padding: 16px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+      box-shadow: var(--shadow);
+    }
+
+    .stat span {
+      display: block;
+      color: var(--muted);
+      font-size: 13px;
+      margin-bottom: 7px;
+    }
+
+    .stat strong {
+      display: block;
+      font-size: 30px;
+      line-height: 1;
+    }
+
+    .stat .target {
+      color: var(--blue);
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1.2fr) minmax(320px, 0.8fr);
+      gap: 18px;
+      align-items: start;
+    }
+
+    .panel {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+
+    .panel-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      min-height: 56px;
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .panel-title {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      font-weight: 750;
+    }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      min-height: 28px;
+      padding: 4px 10px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      color: var(--muted);
+      background: #f8fafc;
+      font-size: 13px;
+      white-space: nowrap;
+    }
+
+    .pill.good {
+      border-color: rgba(16, 185, 129, 0.35);
+      background: rgba(16, 185, 129, 0.1);
+      color: #047857;
+    }
+
+    .pill.warn {
+      border-color: rgba(245, 158, 11, 0.35);
+      background: rgba(245, 158, 11, 0.12);
+      color: #92400e;
+    }
+
+    .pill.bad {
+      border-color: rgba(239, 68, 68, 0.35);
+      background: rgba(239, 68, 68, 0.1);
+      color: #b91c1c;
+    }
+
+    .video-shell {
+      position: relative;
+      width: 100%;
+      aspect-ratio: 16 / 9;
+      background: #0b1220;
+    }
+
+    #player {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+    }
+
+    .video-progress {
+      height: 8px;
+      background: #e5e7eb;
+    }
+
+    .video-progress > div {
+      width: 0%;
+      height: 100%;
+      background: linear-gradient(90deg, var(--blue), var(--green));
+      transition: width 180ms linear;
+    }
+
+    .sequence {
+      display: grid;
+      grid-template-columns: repeat(6, minmax(0, 1fr));
+      border-top: 1px solid var(--line);
+    }
+
+    .step {
+      min-height: 58px;
+      padding: 12px 8px;
+      border-right: 1px solid var(--line);
+      color: var(--muted);
+      text-align: center;
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .step:last-child {
+      border-right: 0;
+    }
+
+    .step.active {
+      color: #fff;
+      background: var(--blue);
+    }
+
+    .camera-body {
+      padding: 16px;
+    }
+
+    .camera-frame {
+      position: relative;
+      width: 100%;
+      aspect-ratio: 1 / 1;
+      border-radius: 8px;
+      background: #111827;
+      overflow: hidden;
+    }
+
+    #pose-canvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+      object-fit: cover;
+    }
+
+    .camera-empty {
+      position: absolute;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      padding: 24px;
+      color: #cbd5e1;
+      text-align: center;
+      font-weight: 700;
+    }
+
+    .prediction {
+      display: grid;
+      gap: 9px;
+      margin-top: 16px;
+    }
+
+    .bar-row {
+      display: grid;
+      grid-template-columns: 76px minmax(0, 1fr) 44px;
+      align-items: center;
+      gap: 10px;
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    .bar {
+      height: 9px;
+      overflow: hidden;
+      border-radius: 999px;
+      background: #e5e7eb;
+    }
+
+    .bar > div {
+      width: 0%;
+      height: 100%;
+      background: var(--blue);
+      transition: width 120ms linear, background 120ms linear;
+    }
+
+    .bar-row.correct .bar > div {
+      background: var(--green);
+    }
+
+    .controls {
+      display: grid;
+      grid-template-columns: 1fr 110px;
+      align-items: center;
+      gap: 12px;
+      padding: 16px;
+      border-top: 1px solid var(--line);
+    }
+
+    .controls label {
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    input[type="range"] {
+      width: 100%;
+      accent-color: var(--blue);
+    }
+
+    .timeline {
+      margin-top: 18px;
+    }
+
+    details.panel {
+      overflow: visible;
+    }
+
+    summary {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      min-height: 56px;
+      padding: 14px 16px;
+      cursor: pointer;
+      list-style: none;
+      font-weight: 750;
+    }
+
+    summary::-webkit-details-marker {
+      display: none;
+    }
+
+    .timeline-grid {
+      display: grid;
+      grid-template-columns: 1fr repeat(2, 96px);
+      gap: 10px;
+      padding: 0 16px 16px;
+      align-items: center;
+    }
+
+    .timeline-grid .label {
+      color: var(--ink);
+      font-weight: 700;
+    }
+
+    .timeline-grid .head {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 800;
+      text-transform: uppercase;
+    }
+
+    .timeline-grid input {
+      width: 100%;
+      min-height: 36px;
+      padding: 6px 8px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      color: var(--ink);
+      background: #fff;
+    }
+
+    .timeline-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+      padding: 0 16px 16px;
+    }
+
+    .status-line {
+      min-height: 24px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .score-pop {
+      animation: pop 320ms ease;
+    }
+
+    @keyframes pop {
+      0% { transform: scale(1); }
+      45% { transform: scale(1.08); color: var(--green); }
+      100% { transform: scale(1); }
+    }
+
+    @media (max-width: 900px) {
+      .topbar {
+        align-items: flex-start;
+        flex-direction: column;
+      }
+
+      .actions {
+        justify-content: flex-start;
+      }
+
+      .stats {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (max-width: 620px) {
+      .app {
+        width: min(100% - 20px, 1180px);
+        padding-top: 16px;
+      }
+
+      h1 {
+        font-size: 23px;
+      }
+
+      .stats,
+      .sequence {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .stat {
+        min-height: 82px;
+      }
+
+      .stat strong {
+        font-size: 25px;
+      }
+
+      .timeline-grid {
+        grid-template-columns: 1fr 82px 82px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="app">
+    <header class="topbar">
+      <div class="brand">
+        <h1>인터랙티브 웜업 챌린지</h1>
+        <p class="subtitle">Immersive Interactive Warm Up ORIGINAL</p>
+      </div>
+      <div class="actions">
+        <button id="camera-button" type="button">
+          <i data-lucide="camera"></i>
+          카메라 시작
+        </button>
+        <button id="play-button" class="secondary" type="button" disabled>
+          <i data-lucide="play"></i>
+          재생
+        </button>
+        <button id="reset-button" class="secondary" type="button">
+          <i data-lucide="rotate-ccw"></i>
+          점수 초기화
+        </button>
+      </div>
+    </header>
+
+    <section class="stats" aria-label="score board">
+      <div class="stat">
+        <span>점수</span>
+        <strong id="score">0</strong>
+      </div>
+      <div class="stat">
+        <span>현재 동작</span>
+        <strong id="target-action" class="target">REST</strong>
+      </div>
+      <div class="stat">
+        <span>인식 결과</span>
+        <strong id="detected-action">대기</strong>
+      </div>
+      <div class="stat">
+        <span>콤보</span>
+        <strong id="combo">0</strong>
+      </div>
+    </section>
+
+    <section class="grid">
+      <article class="panel">
+        <div class="panel-head">
+          <div class="panel-title">
+            <i data-lucide="youtube"></i>
+            YouTube
+          </div>
+          <span id="player-status" class="pill">불러오는 중</span>
+        </div>
+        <div class="video-shell">
+          <div id="player"></div>
+        </div>
+        <div class="video-progress" aria-hidden="true">
+          <div id="video-progress-fill"></div>
+        </div>
+        <div id="sequence" class="sequence"></div>
+      </article>
+
+      <article class="panel">
+        <div class="panel-head">
+          <div class="panel-title">
+            <i data-lucide="scan-line"></i>
+            Pose Check
+          </div>
+          <span id="model-status" class="pill warn">모델 대기</span>
+        </div>
+        <div class="camera-body">
+          <div class="camera-frame">
+            <canvas id="pose-canvas" width="420" height="420"></canvas>
+            <div id="camera-empty" class="camera-empty">카메라 시작을 누르세요</div>
+          </div>
+          <div id="prediction-list" class="prediction"></div>
+          <p id="status-line" class="status-line"></p>
+        </div>
+        <div class="controls">
+          <label for="threshold">정답 기준 <span id="threshold-value">78%</span></label>
+          <input id="threshold" type="range" min="50" max="95" value="78">
+        </div>
+      </article>
+    </section>
+
+    <details class="panel timeline">
+      <summary>
+        <span class="panel-title">
+          <i data-lucide="timer-reset"></i>
+          행동 구간
+        </span>
+        <span id="duration-label" class="pill">자동 설정</span>
+      </summary>
+      <div id="timeline-grid" class="timeline-grid"></div>
+      <div class="timeline-actions">
+        <button id="auto-timeline-button" class="secondary" type="button">
+          <i data-lucide="wand-sparkles"></i>
+          자동 나누기
+        </button>
+        <button id="save-timeline-button" type="button">
+          <i data-lucide="save"></i>
+          저장
+        </button>
+      </div>
+    </details>
+  </main>
+
+  <script>
+    const MODEL_URL = "https://teachablemachine.withgoogle.com/models/2a7UAvMmV/";
+    const VIDEO_ID = "oRr5hxr_bRA";
+    const ACTION_SEQUENCE = ["REST", "SAY HI", "WALK", "SWING", "PAW", "JUMP"];
+    const CUSTOM_TIMELINE = [
+      // 영상 타이밍을 알게 되면 아래처럼 초 단위로 입력하세요.
+      // { label: "REST", start: 0, end: 8.5 },
+      // { label: "SAY HI", start: 8.5, end: 17.2 },
+      // { label: "WALK", start: 17.2, end: 26 },
+      // { label: "SWING", start: 26, end: 34.5 },
+      // { label: "PAW", start: 34.5, end: 43 },
+      // { label: "JUMP", start: 43, end: 52 }
+    ];
+    const STORAGE_KEY = "interactive-warmup-timeline-v1";
+
+    const state = {
+      player: null,
+      playerReady: false,
+      playerState: -1,
+      videoDuration: 0,
+      model: null,
+      webcam: null,
+      canvas: null,
+      ctx: null,
+      maxPredictions: 0,
+      timeline: [],
+      score: 0,
+      combo: 0,
+      bestCombo: 0,
+      correctFrames: 0,
+      lastScoreAt: 0,
+      threshold: 0.78,
+      animationStarted: false
+    };
+
+    const els = {
+      cameraButton: document.getElementById("camera-button"),
+      playButton: document.getElementById("play-button"),
+      resetButton: document.getElementById("reset-button"),
+      score: document.getElementById("score"),
+      combo: document.getElementById("combo"),
+      targetAction: document.getElementById("target-action"),
+      detectedAction: document.getElementById("detected-action"),
+      playerStatus: document.getElementById("player-status"),
+      modelStatus: document.getElementById("model-status"),
+      sequence: document.getElementById("sequence"),
+      progress: document.getElementById("video-progress-fill"),
+      predictionList: document.getElementById("prediction-list"),
+      threshold: document.getElementById("threshold"),
+      thresholdValue: document.getElementById("threshold-value"),
+      canvas: document.getElementById("pose-canvas"),
+      cameraEmpty: document.getElementById("camera-empty"),
+      statusLine: document.getElementById("status-line"),
+      timelineGrid: document.getElementById("timeline-grid"),
+      saveTimelineButton: document.getElementById("save-timeline-button"),
+      autoTimelineButton: document.getElementById("auto-timeline-button"),
+      durationLabel: document.getElementById("duration-label")
+    };
+
+    initIcons();
+    initStaticUi();
+    loadYouTubeApi();
+
+    els.cameraButton.addEventListener("click", startCameraAndModel);
+    els.playButton.addEventListener("click", togglePlayback);
+    els.resetButton.addEventListener("click", resetScore);
+    els.threshold.addEventListener("input", () => {
+      state.threshold = Number(els.threshold.value) / 100;
+      els.thresholdValue.textContent = `${els.threshold.value}%`;
+    });
+    els.saveTimelineButton.addEventListener("click", saveTimelineFromInputs);
+    els.autoTimelineButton.addEventListener("click", () => {
+      buildAutomaticTimeline();
+      saveTimeline();
+      renderTimelineEditor();
+      renderSequence();
+      updateTargetFromVideo();
+    });
+
+    function initIcons() {
+      if (window.lucide) {
+        window.lucide.createIcons();
+      }
+    }
+
+    function initStaticUi() {
+      state.canvas = els.canvas;
+      state.ctx = state.canvas.getContext("2d");
+      renderSequence();
+      renderPredictionPlaceholders();
+
+      if (location.protocol === "file:") {
+        els.statusLine.textContent = "카메라는 GitHub Pages나 localhost에서 가장 안정적으로 작동합니다.";
+      }
+    }
+
+    function loadYouTubeApi() {
+      window.onYouTubeIframeAPIReady = createYouTubePlayer;
+      const script = document.createElement("script");
+      script.src = "https://www.youtube.com/iframe_api";
+      document.head.appendChild(script);
+    }
+
+    function createYouTubePlayer() {
+      const playerVars = {
+        controls: 1,
+        disablekb: 0,
+        fs: 1,
+        modestbranding: 1,
+        playsinline: 1,
+        rel: 0,
+        start: 0
+      };
+
+      if (location.protocol.startsWith("http")) {
+        playerVars.origin = location.origin;
+      }
+
+      state.player = new YT.Player("player", {
+        videoId: VIDEO_ID,
+        playerVars,
+        events: {
+          onReady: onPlayerReady,
+          onStateChange: onPlayerStateChange,
+          onError: onPlayerError
+        }
+      });
+    }
+
+    function onPlayerReady() {
+      state.playerReady = true;
+      els.playerStatus.textContent = "준비됨";
+      els.playerStatus.className = "pill good";
+      els.playButton.disabled = false;
+      refreshDurationUntilReady();
+      setInterval(updateTargetFromVideo, 250);
+    }
+
+    function refreshDurationUntilReady() {
+      const duration = state.player.getDuration();
+      if (duration && Number.isFinite(duration)) {
+        state.videoDuration = duration;
+        els.durationLabel.textContent = formatTime(duration);
+        loadSavedTimeline();
+        renderTimelineEditor();
+        renderSequence();
+        updateTargetFromVideo();
+        return;
+      }
+      setTimeout(refreshDurationUntilReady, 350);
+    }
+
+    function onPlayerStateChange(event) {
+      state.playerState = event.data;
+
+      if (event.data === YT.PlayerState.PLAYING) {
+        els.playerStatus.textContent = "재생 중";
+        els.playerStatus.className = "pill good";
+        els.playButton.innerHTML = '<i data-lucide="pause"></i>일시정지';
+        initIcons();
+      } else if (event.data === YT.PlayerState.PAUSED) {
+        els.playerStatus.textContent = "일시정지";
+        els.playerStatus.className = "pill";
+        els.playButton.innerHTML = '<i data-lucide="play"></i>재생';
+        initIcons();
+      } else if (event.data === YT.PlayerState.ENDED) {
+        els.playerStatus.textContent = "완료";
+        els.playerStatus.className = "pill";
+        els.playButton.innerHTML = '<i data-lucide="rotate-cw"></i>다시 재생';
+        initIcons();
+      }
+    }
+
+    function onPlayerError() {
+      els.playerStatus.textContent = "영상 오류";
+      els.playerStatus.className = "pill bad";
+      els.statusLine.textContent = "YouTube에서 임베드 재생을 차단했거나 네트워크가 불안정합니다.";
+    }
+
+    async function startCameraAndModel() {
+      els.cameraButton.disabled = true;
+      els.modelStatus.textContent = "모델 로딩";
+      els.modelStatus.className = "pill warn";
+      els.statusLine.textContent = "";
+
+      try {
+        const modelURL = MODEL_URL + "model.json";
+        const metadataURL = MODEL_URL + "metadata.json";
+        state.model = await tmPose.load(modelURL, metadataURL);
+        state.maxPredictions = state.model.getTotalClasses();
+
+        state.webcam = new tmPose.Webcam(420, 420, true);
+        await state.webcam.setup();
+        await state.webcam.play();
+
+        els.cameraEmpty.style.display = "none";
+        els.modelStatus.textContent = "인식 중";
+        els.modelStatus.className = "pill good";
+        els.cameraButton.innerHTML = '<i data-lucide="check"></i>카메라 연결됨';
+        initIcons();
+
+        if (!state.animationStarted) {
+          state.animationStarted = true;
+          window.requestAnimationFrame(loop);
+        }
+      } catch (error) {
+        els.cameraButton.disabled = false;
+        els.modelStatus.textContent = "연결 실패";
+        els.modelStatus.className = "pill bad";
+        els.statusLine.textContent = error.message || "카메라 또는 모델을 불러오지 못했습니다.";
+      }
+    }
+
+    async function loop() {
+      if (state.webcam) {
+        state.webcam.update();
+        await predict();
+      }
+      window.requestAnimationFrame(loop);
+    }
+
+    async function predict() {
+      if (!state.model || !state.webcam) {
+        return;
+      }
+
+      const poseResult = await state.model.estimatePose(state.webcam.canvas);
+      const prediction = await state.model.predict(poseResult.posenetOutput);
+      prediction.sort((a, b) => b.probability - a.probability);
+
+      drawPose(poseResult.pose);
+      renderPredictions(prediction);
+      evaluatePrediction(prediction[0]);
+    }
+
+    function drawPose(pose) {
+      state.ctx.drawImage(state.webcam.canvas, 0, 0, state.canvas.width, state.canvas.height);
+      if (!pose) {
+        return;
+      }
+      const minPartConfidence = 0.5;
+      tmPose.drawKeypoints(pose.keypoints, minPartConfidence, state.ctx);
+      tmPose.drawSkeleton(pose.keypoints, minPartConfidence, state.ctx);
+    }
+
+    function evaluatePrediction(top) {
+      const target = getCurrentAction();
+      if (!target || !top) {
+        return;
+      }
+
+      const className = normalizeLabel(top.className);
+      const targetName = normalizeLabel(target.label);
+      const confidence = top.probability;
+      const isPlaying = state.playerState === YT.PlayerState.PLAYING;
+      const isCorrect = isPlaying && className === targetName && confidence >= state.threshold;
+
+      els.detectedAction.textContent = top.className;
+
+      if (isCorrect) {
+        state.correctFrames += 1;
+        const now = performance.now();
+        const scoreDelay = Math.max(420, 820 - Math.min(state.combo, 20) * 14);
+
+        if (state.correctFrames >= 4 && now - state.lastScoreAt > scoreDelay) {
+          const gain = 10 + Math.min(30, Math.floor(state.combo / 4) * 2);
+          state.score += gain;
+          state.combo += 1;
+          state.bestCombo = Math.max(state.bestCombo, state.combo);
+          state.lastScoreAt = now;
+          renderScore();
+        }
+      } else if (isPlaying && confidence > 0.45) {
+        state.correctFrames = 0;
+        state.combo = 0;
+        renderScore(false);
+      }
+    }
+
+    function togglePlayback() {
+      if (!state.playerReady) {
+        return;
+      }
+
+      if (state.playerState === YT.PlayerState.PLAYING) {
+        state.player.pauseVideo();
+      } else if (state.playerState === YT.PlayerState.ENDED) {
+        state.player.seekTo(0, true);
+        state.player.playVideo();
+      } else {
+        state.player.playVideo();
+      }
+    }
+
+    function resetScore() {
+      state.score = 0;
+      state.combo = 0;
+      state.bestCombo = 0;
+      state.correctFrames = 0;
+      state.lastScoreAt = 0;
+      renderScore(false);
+    }
+
+    function renderScore(animate = true) {
+      els.score.textContent = state.score;
+      els.combo.textContent = state.combo;
+
+      if (animate) {
+        els.score.classList.remove("score-pop");
+        void els.score.offsetWidth;
+        els.score.classList.add("score-pop");
+      }
+    }
+
+    function updateTargetFromVideo() {
+      if (!state.playerReady || !state.timeline.length) {
+        return;
+      }
+
+      const current = state.player.getCurrentTime();
+      const duration = state.videoDuration || state.player.getDuration() || 0;
+      const target = getCurrentAction(current);
+      const progress = duration ? Math.min(100, (current / duration) * 100) : 0;
+
+      els.progress.style.width = `${progress}%`;
+      if (target) {
+        els.targetAction.textContent = target.label;
+      }
+
+      renderSequence(target ? target.label : "");
+    }
+
+    function getCurrentAction(time = null) {
+      const current = time === null && state.playerReady ? state.player.getCurrentTime() : time;
+      return state.timeline.find(item => current >= item.start && current < item.end) || state.timeline[state.timeline.length - 1];
+    }
+
+    function buildAutomaticTimeline() {
+      const duration = state.videoDuration || (state.playerReady ? state.player.getDuration() : 0) || ACTION_SEQUENCE.length * 10;
+      const segment = duration / ACTION_SEQUENCE.length;
+      state.timeline = ACTION_SEQUENCE.map((label, index) => ({
+        label,
+        start: roundTime(index * segment),
+        end: roundTime(index === ACTION_SEQUENCE.length - 1 ? duration : (index + 1) * segment)
+      }));
+    }
+
+    function loadSavedTimeline() {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          if (isValidTimeline(parsed)) {
+            state.timeline = parsed;
+            return;
+          }
+        } catch (error) {
+          localStorage.removeItem(STORAGE_KEY);
+        }
+      }
+      if (isValidTimeline(CUSTOM_TIMELINE)) {
+        state.timeline = CUSTOM_TIMELINE.map(item => ({ ...item }));
+        return;
+      }
+      buildAutomaticTimeline();
+    }
+
+    function isValidTimeline(items) {
+      if (!Array.isArray(items) || items.length !== ACTION_SEQUENCE.length) {
+        return false;
+      }
+
+      return items.every((item, index) => {
+        const previous = items[index - 1];
+        const followsPrevious = !previous || item.start >= previous.end;
+        return item.label === ACTION_SEQUENCE[index] &&
+          Number.isFinite(item.start) &&
+          Number.isFinite(item.end) &&
+          item.start >= 0 &&
+          item.end > item.start &&
+          followsPrevious;
+      });
+    }
+
+    function saveTimelineFromInputs() {
+      const next = ACTION_SEQUENCE.map(label => {
+        const startInput = document.querySelector(`[data-time="start"][data-label="${cssEscape(label)}"]`);
+        const endInput = document.querySelector(`[data-time="end"][data-label="${cssEscape(label)}"]`);
+        return {
+          label,
+          start: roundTime(Number(startInput.value)),
+          end: roundTime(Number(endInput.value))
+        };
+      });
+
+      if (!isValidTimeline(next)) {
+        els.durationLabel.textContent = "구간 확인";
+        els.durationLabel.className = "pill bad";
+        return;
+      }
+
+      state.timeline = next;
+      saveTimeline();
+      renderTimelineEditor();
+      renderSequence();
+      updateTargetFromVideo();
+      els.durationLabel.className = "pill good";
+      els.durationLabel.textContent = "저장됨";
+      setTimeout(() => {
+        els.durationLabel.className = "pill";
+        els.durationLabel.textContent = formatTime(state.videoDuration);
+      }, 1000);
+    }
+
+    function saveTimeline() {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state.timeline));
+    }
+
+    function renderTimelineEditor() {
+      els.timelineGrid.innerHTML = `
+        <div class="head">행동</div>
+        <div class="head">시작</div>
+        <div class="head">끝</div>
+      `;
+
+      state.timeline.forEach(item => {
+        const label = document.createElement("div");
+        label.className = "label";
+        label.textContent = item.label;
+
+        const start = document.createElement("input");
+        start.type = "number";
+        start.min = "0";
+        start.step = "0.1";
+        start.value = item.start;
+        start.dataset.label = item.label;
+        start.dataset.time = "start";
+
+        const end = document.createElement("input");
+        end.type = "number";
+        end.min = "0";
+        end.step = "0.1";
+        end.value = item.end;
+        end.dataset.label = item.label;
+        end.dataset.time = "end";
+
+        els.timelineGrid.append(label, start, end);
+      });
+    }
+
+    function renderSequence(activeLabel = "") {
+      if (!state.timeline.length) {
+        state.timeline = ACTION_SEQUENCE.map((label, index) => ({ label, start: index, end: index + 1 }));
+      }
+
+      els.sequence.innerHTML = "";
+      state.timeline.forEach(item => {
+        const step = document.createElement("div");
+        step.className = `step${item.label === activeLabel ? " active" : ""}`;
+        step.textContent = item.label;
+        els.sequence.appendChild(step);
+      });
+    }
+
+    function renderPredictionPlaceholders() {
+      els.predictionList.innerHTML = "";
+      ACTION_SEQUENCE.forEach(label => {
+        const row = document.createElement("div");
+        row.className = "bar-row";
+        row.innerHTML = `
+          <span>${label}</span>
+          <div class="bar"><div></div></div>
+          <strong>0%</strong>
+        `;
+        els.predictionList.appendChild(row);
+      });
+    }
+
+    function renderPredictions(predictions) {
+      const target = getCurrentAction();
+      const byClass = new Map(predictions.map(item => [normalizeLabel(item.className), item.probability]));
+
+      Array.from(els.predictionList.children).forEach(row => {
+        const label = row.children[0].textContent;
+        const value = byClass.get(normalizeLabel(label)) || 0;
+        const percent = Math.round(value * 100);
+        row.querySelector(".bar > div").style.width = `${percent}%`;
+        row.querySelector("strong").textContent = `${percent}%`;
+        row.classList.toggle("correct", Boolean(target && normalizeLabel(label) === normalizeLabel(target.label)));
+      });
+    }
+
+    function normalizeLabel(value) {
+      return String(value).trim().toUpperCase();
+    }
+
+    function formatTime(totalSeconds) {
+      const seconds = Math.max(0, Math.round(totalSeconds));
+      const minutes = Math.floor(seconds / 60);
+      const rest = String(seconds % 60).padStart(2, "0");
+      return `${minutes}:${rest}`;
+    }
+
+    function roundTime(value) {
+      return Math.round(Number(value) * 10) / 10;
+    }
+
+    function cssEscape(value) {
+      if (window.CSS && CSS.escape) {
+        return CSS.escape(value);
+      }
+      return String(value).replace(/"/g, '\\"');
+    }
+  </script>
+</body>
+</html>
